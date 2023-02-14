@@ -7,7 +7,7 @@ pipeline {
         AWS_ACCOUNT_ID=sh(script:'export PATH="$PATH:/usr/local/bin" && aws sts get-caller-identity --query Account --output text', returnStdout:true).trim()
         AWS_REGION="us-east-1"
         ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-        ANS_KEYPAIR="cw-${APP_NAME}-dev-${BUILD_NUMBER}.key"
+        ANS_KEYPAIR="petclinic-${APP_NAME}-dev-${BUILD_NUMBER}.key"
         ANSIBLE_PRIVATE_KEY_FILE="${WORKSPACE}/${ANS_KEYPAIR}"
         ANSIBLE_HOST_KEY_CHECKING="False"
     }
@@ -17,17 +17,11 @@ pipeline {
                 echo "Creating ECR Repo for ${APP_NAME} app"
                 sh '''
                 aws ecr describe-repositories --region ${AWS_REGION} --repository-name ${APP_REPO_NAME} || \
-                if [[ $(echo $?) -eq 0 ]]
-                    then
-                       	echo "ecr repo already created"
-
-                       else
                          aws ecr create-repository \
                          --repository-name ${APP_REPO_NAME} \
                          --image-scanning-configuration scanOnPush=true \
                          --image-tag-mutability MUTABLE \
                          --region ${AWS_REGION}
-                    fi
                 '''
             }
         }
@@ -113,9 +107,9 @@ pipeline {
                 echo 'Deploying App on Kubernetes'
                 sh "envsubst < k8s/petclinic_chart/values-template.yaml > k8s/petclinic_chart/values.yaml"
                 sh "sed -i s/HELM_VERSION/${BUILD_NUMBER}/ k8s/petclinic_chart/Chart.yaml"
-                sh "helm repo add stable-petclinic-tr s3://petclinic-helm-charts-gkhn/stable/myapp/"
+                sh "helm repo add stable-petclinic s3://petclinic-helm-charts-gkhn/stable/myapp/"
                 sh "helm package k8s/petclinic_chart"
-                sh "helm s3 push --force petclinic_chart-${BUILD_NUMBER}.tgz stable-petclinic-tr"
+                sh "helm s3 push --force petclinic_chart-${BUILD_NUMBER}.tgz stable-petclinic"
                 sh "envsubst < ansible/playbooks/dev-petclinic-deploy-template > ansible/playbooks/dev-petclinic-deploy.yaml"
                 sh "sleep 60"    
                 sh "ansible-playbook -i ./ansible/inventory/dev_stack_dynamic_inventory_aws_ec2.yaml ./ansible/playbooks/dev-petclinic-deploy.yaml"
